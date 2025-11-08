@@ -72,12 +72,12 @@ def _sample_search_space(trial, rc: RunConfig):
     """Define a compact, sane search space."""
     space = {}
     # Data
-    space["window_len"] = trial.suggest_categorical("data.window_len", [2048])
+    space["window_len"] = trial.suggest_categorical("data.window_len", [1024])
     # Model
-    space["hidden"]  = trial.suggest_categorical("model.hidden", [128])
-    space["k"]       = trial.suggest_categorical("model.k", [11])
-    space["layers"]  = trial.suggest_categorical("model.layers", [2,3,4,5])
-    space["dropout"] = trial.suggest_float("model.dropout", 0.2, 0.5, step=0.1)
+    space["hidden"]  = trial.suggest_categorical("model.hidden", [4,8,16])
+    space["k"]       = trial.suggest_categorical("model.k", [9,11,13,15])
+    space["layers"]  = trial.suggest_categorical("model.layers", [2,3,4,5,6])
+    space["dropout"] = trial.suggest_float("model.dropout", 0.2, 0.5, step=0.05)
     # Train
     space["lr"]           = trial.suggest_float("train.lr", 0.0001, 0.0003, log=True)
     space["weight_decay"] = trial.suggest_float("train.weight_decay", 1e-6, 4*1e-6, log=True)
