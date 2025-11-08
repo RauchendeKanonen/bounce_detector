@@ -486,14 +486,10 @@ def update_file_with_missing_symbols(
     save_args = {}
 
     # 1. Copy existing data
-    if len(existing) == 1 and "DEFAULT" in all_quotes:
-        # single-symbol legacy format
-        save_args["quotes"] = all_quotes["DEFAULT"]
-        save_args["trades"] = all_trades["DEFAULT"]
-    else:
-        for sym in existing:
-            save_args[f"quotes_{sym}"] = all_quotes[sym]
-            save_args[f"trades_{sym}"] = all_trades[sym]
+
+    for sym in existing:
+        save_args[f"quotes_{sym}"] = all_quotes[sym]
+        save_args[f"trades_{sym}"] = all_trades[sym]
 
     # 2. Add new symbols (always multi-symbol format)
     for sym in missing:
@@ -600,8 +596,8 @@ if __name__ == "__main__":
                 save_args[f"trades_{sym}"] = all_trades[sym]
         else:
             sym = args.symbols[0]
-            save_args["quotes"] = all_quotes[sym]
-            save_args["trades"] = all_trades[sym]
+            save_args[f"quotes_{sym}"] = all_quotes[sym]
+            save_args[f"trades_{sym}"] = all_trades[sym]
             del meta["symbols"]
 
         save_args["meta"] = np.array([meta], dtype=object)
