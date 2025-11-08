@@ -1,0 +1,35 @@
+{
+  "version": "v1",
+  "data": {
+    "train_glob": ["data/train-Lo/*.npz"],
+    "val_glob":   ["data/val-Lo/*.npz"],
+    "test_glob":  ["data/test-Lo/*.npz"],
+    "feature_fields": ["bid","ask","bid_size","ask_size","last_trade_price","trade_volume","buy_count","sell_count"],
+    "window_len": 256,
+    "use_valid_idx": true,
+    "scaler_clip": 8.0
+  },
+  "model": {
+    "in_features": 4,
+    "window_len": 256,
+    "hidden": 64,
+    "k": 9,
+    "layers": 2,
+    "dropout": 0.1,
+    "out_dim": 1
+  },
+  "train": {
+    "device": "auto",
+    "epochs": 30,
+    "batch_size": 256,
+    "lr": 0.0002,
+    "weight_decay": 0.0001,
+    "precision16": true,
+    "class_weight_pos": "auto",
+    "early_stopping_patience": 10
+  },
+  "eval": {
+    "thresholds": [0.5],
+    "metrics": ["auprc", "roc_auc", "f1", "accuracy"]
+  }
+}

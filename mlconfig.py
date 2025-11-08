@@ -1,0 +1,1 @@
+WINDOW_LEN = 20
