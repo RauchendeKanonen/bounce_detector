@@ -6,7 +6,6 @@
     "test_glob":  ["data/test-Lo/*.npz"],
     "feature_fields": ["bid","ask","bid_size","ask_size","last_trade_price","trade_volume","buy_count","sell_count"],
     "window_len": 256,
-    "use_valid_idx": true,
     "scaler_clip": 8.0
   },
   "model": {
