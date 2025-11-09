@@ -34,7 +34,6 @@ if __name__ == "__main__":
     parser.add_argument("--predict-overwrite-labels", action="store_true", help="Write predicted labels into existing 'labels'")
     parser.add_argument("--predict-batch", type=int, default=512, help="Batch size during prediction.")
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to a trained checkpoint (.ckpt/.pkl). Required for predict-back unless --out is a checkpoint file.")
-    parser.add_argument("--only-valid_idx", type=lambda x: str(x).lower() in ('1','true','yes'), default=False, help="Predict only on valid_idx positions.")
 
 
     #################### Search #####################
@@ -102,7 +101,6 @@ if __name__ == "__main__":
             suffix=".pred",
             overwrite_labels=args.predict_overwrite_labels,
             batch_size=args.predict_batch,
-            use_valid_idx_only=args.only_valid_idx
         )
         print("Wrote:", *written, sep="\n  ")
         exit(0)
