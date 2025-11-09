@@ -5,7 +5,6 @@ from sklearn.metrics import average_precision_score, roc_auc_score, f1_score, ac
 from .data import make_windows_from_npz, apply_scaler
 from .model import TinyTemporalCNN
 from .train import batched_loader
-
 def evaluate_from_npz(trained: dict, eval_paths: list[str], feature_fields: list[str] | None = None) -> dict:
     ff = trained.get("feature_fields", feature_fields or [])
     wl = trained["window_len"]
@@ -17,7 +16,7 @@ def evaluate_from_npz(trained: dict, eval_paths: list[str], feature_fields: list
     model.to(device).eval()
     model.load_state_dict(trained["model_state"])
 
-    X, y, _, _ = make_windows_from_npz(eval_paths, ff, window_len=wl, use_valid_idx=True)
+    X, y, _, _ = make_windows_from_npz(eval_paths, ff, window_len=wl)
     y = np.asarray(y).reshape(-1)
     X = apply_scaler(X, scaler, clip=clip)
 
@@ -73,7 +72,7 @@ def best_threshold_on_val(trained_payload: dict, val_paths: list[str], feature_f
     model.to(device).eval()
     model.load_state_dict(trained_payload["model_state"])
 
-    X, y, _, _ = make_windows_from_npz(val_paths, ff, window_len=wl, use_valid_idx=True)
+    X, y, _, _ = make_windows_from_npz(val_paths, ff, window_len=wl)
     y = np.asarray(y).reshape(-1)
     X = apply_scaler(X, scaler, clip=clip)
 

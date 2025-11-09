@@ -39,7 +39,7 @@ def _best_threshold_on_val(trained_payload: dict, val_paths: list[str], feature_
     model.to(device).eval()
     model.load_state_dict(trained_payload["model_state"])
 
-    X, y, _, _ = make_windows_from_npz(val_paths, ff, window_len=wl, use_valid_idx=True)
+    X, y, _, _ = make_windows_from_npz(val_paths, ff, window_len=wl)
     y = np.asarray(y).reshape(-1)
     X = apply_scaler(X, scaler, clip=clip)
     probs = []
@@ -127,7 +127,7 @@ def run_search_optuna(
     )
 
     # Precompute auto class-weight ratio once from train y
-    Xtmp, ytmp, _, _ = make_windows_from_npz(train_files, base_rc.data.feature_fields, base_rc.data.window_len, use_valid_idx=True)
+    Xtmp, ytmp, _, _ = make_windows_from_npz(train_files, base_rc.data.feature_fields, base_rc.data.window_len)
     yflat = ytmp[ytmp >= 0]
     pos = max(1, int((yflat == 1).sum())); neg = max(1, int((yflat == 0).sum()))
     auto_ratio = float(neg / pos)

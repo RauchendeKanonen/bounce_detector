@@ -8,27 +8,21 @@ def load_one_npz(path: str) -> Dict[str, Any]:
     with np.load(path, allow_pickle=True) as npz:
         sampled = npz["sampled"]
         labels = npz["labels"]
-        valid_idx = npz["valid_idx"]
-    return dict(sampled=sampled, labels=labels, valid_idx=valid_idx)
+    return dict(sampled=sampled, labels=labels)
 
-def make_windows_from_npz(npz_paths: List[str], feature_fields: List[str], window_len: int, use_valid_idx: bool = True) -> Tuple[np.ndarray, np.ndarray, int, List[str]]:
+def make_windows_from_npz(npz_paths: List[str], feature_fields: List[str], window_len: int) -> Tuple[np.ndarray, np.ndarray, int, List[str]]:
     X_list, Y_list = [], []
     for p in npz_paths:
         data = load_one_npz(p)
         sampled = data["sampled"]
         labels = data["labels"]
-        valid_idx = data["valid_idx"].astype(int)
         feats = np.stack([sampled[name] for name in feature_fields], axis=1)
         T_total = feats.shape[0]
-        idx_iter = valid_idx if use_valid_idx else range(window_len - 1, T_total)
-        for t0 in idx_iter:
-            t0 = int(t0)
-            if t0 < window_len - 1 or t0 >= T_total:
-                continue
+        for t0 in range(window_len - 1, T_total):
             X_list.append(feats[t0 - window_len + 1 : t0 + 1][None, ...])
             Y_list.append(labels[t0])
     if not X_list:
-        raise RuntimeError("No training windows were constructed. Check valid_idx and window_len in your .npz files.")
+        raise RuntimeError("No training windows were constructed. Check window_len and .npz files.")
     X = np.concatenate(X_list, axis=0)  # [N, T, F]
     X = X[:, :, None, :]                # [N, T, S=1, F]
     y = np.asarray(Y_list).astype(np.int64)

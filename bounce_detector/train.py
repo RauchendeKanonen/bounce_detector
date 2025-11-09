@@ -64,11 +64,9 @@ def train_from_npz(
 
     # --- data ---
     Xtrain, ytrain, _, _ = make_windows_from_npz(
-        train_paths, feature_fields, window_len=window_len, use_valid_idx=False
-    )
+        train_paths, feature_fields, window_len=window_len)
     Xval, yval, _, _ = make_windows_from_npz(
-        val_paths, feature_fields, window_len=window_len, use_valid_idx=False
-    )
+        val_paths, feature_fields, window_len=window_len)
     print("loaded windows")
 
     # --- scale ---
@@ -217,7 +215,7 @@ def train_from_npz(
 def stream_windows_from_files(paths, feature_fields, window_len, batch_size, scaler, clip, shuffle=False):
     # yields (xb, yb) batches already scaled; loads one file at a time
     for p in paths:
-        X, y, _, _ = make_windows_from_npz([p], feature_fields, window_len=window_len, use_valid_idx=False)
+        X, y, _, _ = make_windows_from_npz([p], feature_fields, window_len=window_len)
         X = apply_scaler(X, scaler, clip=clip)
         if shuffle:
             idx = np.random.permutation(len(X))
@@ -235,7 +233,7 @@ def compute_scaler_and_class_weight_streaming(paths, feature_fields, window_len,
     neg = 1
 
     for p in paths:
-        X, y, _, _ = make_windows_from_npz([p], feature_fields, window_len=window_len, use_valid_idx=False)
+        X, y, _, _ = make_windows_from_npz([p], feature_fields, window_len=window_len)
         if sample_limit_per_file is not None and len(X) > sample_limit_per_file:
             sel = np.random.choice(len(X), size=sample_limit_per_file, replace=False)
             Xs, ys = X[sel], y[sel]
@@ -298,7 +296,6 @@ def train_from_npz_streaming(
     grad_clip_max_norm: float | None = None,
     warmup_steps: int = 0,
     use_cosine_after_warmup: bool = False,
-    sample_limit_per_file_for_scaler: int | None = 2000,  # OPTIONAL: speed up scaler pass
     shuffle_each_epoch: bool = True,
 ) -> dict:
     torch.manual_seed(42)
@@ -306,37 +303,38 @@ def train_from_npz_streaming(
     device = torch.device(_device_from_cfg(device))
     model.to(device)
 
-    # --- Pass 1: scaler + class weight ---
-    scaler_feat, cw_auto = compute_scaler_and_class_weight_streaming(
-        train_paths, feature_fields, window_len, sample_limit_per_file_for_scaler
-    )
-    cw = cw_auto if (isinstance(class_weight, str) and class_weight == "auto") else float(class_weight)
+    # --- Load and scale once ---
+    Xtrain, ytrain, _, _ = make_windows_from_npz(train_paths, feature_fields, window_len=window_len)
+    Xval, yval, _, _ = make_windows_from_npz(val_paths, feature_fields, window_len=window_len)
+    print("loaded windows")
+
+    scaler_feat = fit_scaler_nan_safe(Xtrain)
+    Xtrain = apply_scaler(Xtrain, scaler_feat, clip=scaler_clip)
+    Xval   = apply_scaler(Xval,   scaler_feat, clip=scaler_clip)
+
+    # --- class weight ---
+    cw = class_weight
+    if isinstance(cw, str) and cw == "auto":
+        y_flat = ytrain[ytrain >= 0]
+        pos = max(1, int((y_flat == 1).sum()))
+        neg = max(1, int((y_flat == 0).sum()))
+        cw = float(neg / pos)
     pos_weight = torch.tensor([float(cw)], device=device, dtype=torch.float32)
 
-    def bce_logits_loss_masked(logits: torch.Tensor, targets: torch.Tensor) -> tuple[torch.Tensor, int]:
+    def bce_logits_loss_masked(logits: torch.Tensor, targets: torch.Tensor) -> Tuple[torch.Tensor, int]:
         mask = (targets >= 0.0)
-        vcount = int(mask.sum().item())
-        if vcount == 0:
-            z = torch.zeros((), device=logits.device, dtype=logits.dtype)
-            return z, 0
+        if not mask.any():
+            return torch.zeros((), device=logits.device), 0
         loss = Ft.binary_cross_entropy_with_logits(
             logits, targets, pos_weight=pos_weight, reduction="none"
         )
-        loss = loss[mask].mean()
-        return loss, vcount
+        loss = loss[mask]
+        return loss.mean(), int(mask.sum())
 
     optim = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    # Estimate total steps (rough): do a lightweight count pass over train files
-    def estimate_total_steps():
-        steps = 0
-        for p in train_paths:
-            X, y, _, _ = make_windows_from_npz([p], feature_fields, window_len=window_len, use_valid_idx=False)
-            steps += math.ceil(len(X) / max(1, batch_size))
-        return max(1, steps) * epochs
-
-    total_steps = estimate_total_steps()
     if warmup_steps > 0 or use_cosine_after_warmup:
+        total_steps = epochs * math.ceil(len(Xtrain) / max(1, batch_size))
         def lr_lambda(step: int):
             if warmup_steps > 0 and step < warmup_steps:
                 return (step + 1) / warmup_steps
@@ -355,7 +353,6 @@ def train_from_npz_streaming(
     global_step = 0
 
     for epoch in range(1, epochs + 1):
-        # --- TRAIN ---
         model.train()
         train_loss_sum, n_train = 0.0, 0
 
@@ -365,9 +362,7 @@ def train_from_npz_streaming(
         else:
             train_paths_epoch = train_paths
 
-        for xb, yb in stream_windows_from_files(
-            train_paths_epoch, feature_fields, window_len, batch_size, scaler_feat, scaler_clip, shuffle=False
-        ):
+        for xb, yb in batched_loader(Xtrain, ytrain, batch_size=batch_size, shuffle=True):
             xb = torch.as_tensor(xb, device=device, dtype=torch.float32)
             yb = torch.as_tensor(yb, device=device, dtype=torch.float32).unsqueeze(1)
             if not (yb >= 0.0).any():
@@ -395,13 +390,11 @@ def train_from_npz_streaming(
 
         train_loss = train_loss_sum / max(1, n_train)
 
-        # --- VAL (also streamed) ---
+        # --- VAL ---
         model.eval()
         vloss_sum, n_val = 0.0, 0
         with torch.no_grad(), autocast(device_type="cuda", enabled=(precision16 and device.type == "cuda")):
-            for xb, yb in stream_windows_from_files(
-                val_paths, feature_fields, window_len, batch_size, scaler_feat, scaler_clip, shuffle=False
-            ):
+            for xb, yb in batched_loader(Xval, yval, batch_size=batch_size, shuffle=False):
                 xb = torch.as_tensor(xb, device=device, dtype=torch.float32)
                 yb = torch.as_tensor(yb, device=device, dtype=torch.float32).unsqueeze(1)
                 logits = model(xb)
@@ -414,7 +407,6 @@ def train_from_npz_streaming(
 
         print(f"epoch {epoch:03d} | train_loss: {train_loss:.6f} | val_loss: {vloss_epoch:.6f}")
 
-        # --- early stopping ---
         if vloss_epoch < best_val_loss:
             best_val_loss = vloss_epoch
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
@@ -422,18 +414,16 @@ def train_from_npz_streaming(
         else:
             patience -= 1
             if patience <= 0:
-                print(f"Early stopping at epoch {epoch} (no val improvement for {early_stopping_patience} checks).")
+                print(f"Early stopping at epoch {epoch}")
                 break
 
     if best_state is not None:
         model.load_state_dict(best_state)
 
-    # Build payload (same as before)
-    F = getattr(model, "F", None) or len(scaler_feat["mean"])
+    F = getattr(model, "F", len(scaler_feat["mean"]))
     T = window_len
     model_init_kwargs = dict(
-        F=getattr(model, "F", F),
-        T=getattr(model, "T", T),
+        F=F, T=T,
         hidden=int(getattr(model, "hidden", 64)),
         n_out=1,
         k=int(getattr(model, "k", 9)),

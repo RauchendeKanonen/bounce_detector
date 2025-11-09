@@ -11,7 +11,6 @@ class DataConfig:
     feature_fields: list[str] | None = None
     window_len: int = 200
     scaler_clip: float = 8.0
-    use_valid_idx: bool = True
     label_name: str = "labels"
     seed: int = 42
 
